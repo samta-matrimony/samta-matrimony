@@ -174,7 +174,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       setError(null);
       const res = await signInWithEmailAndPassword(auth, trimmedEmail, password);
-      const role = await getRoleFromUser(res.user);
+      // Use ref.current to avoid stale closure when getRoleFromUser updates
+      if (!getRoleFromUserRef.current) {
+        throw new Error("Auth role resolver not initialized");
+      }
+      const role = await getRoleFromUserRef.current(res.user);
 
       // In production, fetch complete user profile from Firestore
       // For demo, construct basic profile
@@ -224,9 +228,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return userData;
     } catch (err: any) {
       setUser(null);
+      // Log full error details in dev (console removed in prod build)
+      if (import.meta.env.DEV) {
+        console.error("Login error details:", {
+          errorCode: err?.code,
+          errorMessage: err?.message,
+          fullError: err,
+        });
+      }
       const authError: AuthError = {
         code: err?.code || "auth/unknown",
-        message: mapFirebaseErrorToMessage(err?.code),
+        message: mapFirebaseErrorToMessage(err?.code || err?.message),
       };
       setError(authError);
       throw authError;
@@ -349,7 +361,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 };
 
 // Helper function to map Firebase error codes to user-friendly messages
-export const mapFirebaseErrorToMessage = (errorCode: string | undefined): string => {
+export const mapFirebaseErrorToMessage = (errorCodeOrMessage: string | undefined): string => {
   const errorMap: Record<string, string> = {
     "auth/user-not-found": "Account not found. Please check your email.",
     "auth/wrong-password": "Incorrect password. Please try again.",
@@ -360,9 +372,27 @@ export const mapFirebaseErrorToMessage = (errorCode: string | undefined): string
     "auth/too-many-requests": "Too many login attempts. Please try again later.",
     "auth/invalid-credential": "Invalid email or password.",
     "auth/network-request-failed": "Network error. Please check your connection.",
+    "auth/not-initialized": "Firebase not properly configured. Contact support.",
+    "auth/missing-credentials": "Email and password are required.",
   };
 
-  return errorMap[errorCode || "unknown"] || "Authentication failed. Please try again.";
+  if (!errorCodeOrMessage) {
+    return "Authentication failed. Please try again.";
+  }
+
+  // Return mapped error if available
+  const mappedError = errorMap[errorCodeOrMessage];
+  if (mappedError) {
+    return mappedError;
+  }
+
+  // If error message is already user-friendly (starts with capital), use it
+  if (errorCodeOrMessage.charAt(0) === errorCodeOrMessage.charAt(0).toUpperCase()) {
+    return errorCodeOrMessage;
+  }
+
+  // Default fallback
+  return "Authentication failed. Please try again.";
 };
 
 export const useAuth = () => {
