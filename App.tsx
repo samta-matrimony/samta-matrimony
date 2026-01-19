@@ -6,6 +6,7 @@ import Search from './pages/Search';
 import Browse from './pages/Browse';
 import ProfileView from './pages/ProfileView';
 import Register from './pages/Register';
+import Plans from './pages/Plans';
 import Dashboard from './pages/Dashboard';
 import Messages from './pages/Messages';
 import MyProfile from './pages/MyProfile';
@@ -72,6 +73,7 @@ const AppRoutes: React.FC = () => {
         <Route path="/browse" element={<Browse />} />
         <Route path="/profile/:id" element={<ProfileView />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/plans" element={<Plans />} />
         
         {/* Authentication Routes */}
         <Route path="/admin/login" element={<AdminLogin />} />

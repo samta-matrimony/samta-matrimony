@@ -28,20 +28,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [error, setError] = useState<AuthError | null>(null);
   const getRoleFromUserRef = useRef<(firebaseUser: FirebaseUser) => Promise<"admin" | "user"> | null>(null);
 
-  // Helper function to extract role from custom claims or fallback
+  // Helper function to extract role from custom claims only (secure)
   const getRoleFromUser = useCallback(async (firebaseUser: FirebaseUser): Promise<"admin" | "user"> => {
     try {
       const idTokenResult = await getIdTokenResult(firebaseUser);
-      // Get role from custom claims set in Firebase Admin SDK
+      // Get role from custom claims set in Firebase Admin SDK (server-side only)
       const customRole = idTokenResult.claims?.role as string | undefined;
       if (customRole === "admin") {
         return "admin";
       }
     } catch (err) {
       console.error("Error fetching custom claims:", err);
+      // Do not fallback to insecure client-side checks
     }
-    // Fallback: check email domain (for backward compatibility, but not secure for role assignment)
-    return firebaseUser.email?.endsWith("@samta.com") ? "admin" : "user";
+    // Default to user role if no admin claim or error
+    return "user";
   }, []);
 
   // Store in ref to avoid stale closures
@@ -66,12 +67,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         try {
           if (firebaseUser) {
             const role = await getRoleFromUser(firebaseUser);
+            // In production, fetch user profile from Firestore/database
+            // For demo purposes, construct basic profile from Firebase user
             const userData: UserProfile = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || "",
               id: firebaseUser.uid,
               role,
-              // These will be populated from actual user profile data
+              // Default values - in production, load from database
               name: firebaseUser.displayName || "User",
               gender: "Other" as const,
               age: 0,
@@ -138,7 +141,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => unsubscribe();
   }, [getRoleFromUser]);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string): Promise<UserProfile> => {
     if (!auth) {
       const authError: AuthError = {
         code: "auth/not-initialized",
@@ -158,7 +161,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       throw authError;
     }
 
-    // Validate email format
+    // Basic email format validation (Firebase will validate further)
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       const authError: AuthError = {
         code: "auth/invalid-email",
@@ -173,6 +176,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const res = await signInWithEmailAndPassword(auth, trimmedEmail, password);
       const role = await getRoleFromUser(res.user);
 
+      // In production, fetch complete user profile from Firestore
+      // For demo, construct basic profile
       const userData: UserProfile = {
         id: res.user.uid,
         uid: res.user.uid,
@@ -228,7 +233,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, []);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(async (): Promise<void> => {
     if (!auth) {
       const authError: AuthError = {
         code: "auth/not-initialized",
@@ -241,10 +246,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       await signOut(auth);
       setUser(null);
       setError(null);
-      // Clean up local storage on logout
-      localStorage.removeItem("samta_chat_messages");
-      localStorage.removeItem("samta_interests");
-      localStorage.removeItem("samta_users_registry_v1");
+      // Clean up local storage on logout (app-specific data)
+      try {
+        localStorage.removeItem("samta_chat_messages");
+        localStorage.removeItem("samta_interests");
+        localStorage.removeItem("samta_users_registry_v1");
+        localStorage.removeItem("samta_user_subscription");
+      } catch (storageErr) {
+        console.warn("Failed to clear localStorage on logout:", storageErr);
+      }
     } catch (err: any) {
       const authError: AuthError = {
         code: err?.code || "auth/logout-failed",
@@ -255,12 +265,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, []);
 
-  const updateUser = useCallback((updates: Partial<UserProfile>) => {
+  const updateUser = useCallback((updates: Partial<UserProfile>): void => {
     setUser((prev) => (prev ? { ...prev, ...updates } : null));
     setError(null);
+    // In production, persist to Firestore/database
   }, []);
 
-  const upgradePlan = useCallback(async (planType: "Silver" | "Gold" | "Platinum", months: number) => {
+  const upgradePlan = useCallback(async (planType: "Silver" | "Gold" | "Platinum", months: number): Promise<void> => {
     if (!user) {
       const authError: AuthError = {
         code: "auth/user-not-authenticated",
@@ -279,10 +290,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       throw authError;
     }
 
-    if (months <= 0) {
+    if (months <= 0 || months > 120) { // Reasonable limit
       const authError: AuthError = {
         code: "auth/invalid-duration",
-        message: "Duration must be greater than 0",
+        message: "Duration must be between 1 and 120 months",
       };
       setError(authError);
       throw authError;
@@ -290,7 +301,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     try {
       setError(null);
-      // Simulate plan upgrade in localStorage
+      // In production, handle plan upgrade server-side with payment processing
+      // For demo purposes, simulate in localStorage
       const updatedUser: UserProfile = {
         ...user,
         subscription: {
@@ -300,9 +312,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         },
       };
       setUser(updatedUser);
-      
-      // Persist to localStorage
-      localStorage.setItem("samta_user_subscription", JSON.stringify(updatedUser.subscription));
+
+      // Persist to localStorage (demo only - not secure for production)
+      try {
+        localStorage.setItem("samta_user_subscription", JSON.stringify(updatedUser.subscription));
+      } catch (storageErr) {
+        console.warn("Failed to persist subscription to localStorage:", storageErr);
+      }
     } catch (err: any) {
       const authError: AuthError = {
         code: err?.code || "auth/upgrade-failed",
