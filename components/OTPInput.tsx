@@ -64,7 +64,9 @@ const OTPInput: React.FC<OTPInputProps> = ({ onComplete, onResend, isLoading, er
             type="text"
             inputMode="numeric"
             maxLength={1}
-            ref={(el) => (inputs.current[index] = el)}
+            ref={(el) => {
+              if (el) inputs.current[index] = el;
+            }}
             value={data}
             onChange={(e) => handleChange(e.target, index)}
             onKeyDown={(e) => handleKeyDown(e, index)}

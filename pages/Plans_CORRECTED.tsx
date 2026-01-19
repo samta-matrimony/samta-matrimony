@@ -219,8 +219,8 @@ const Plans: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 1200));
 
       // In production, call actual payment gateway
-      if (auth?.upgradePlan) {
-        await auth.upgradePlan(selectedPlan.type, selectedPlan.months);
+      if (auth?.upgradePlan && selectedPlan.type !== 'Free') {
+        await auth.upgradePlan(selectedPlan.type as "Silver" | "Gold" | "Platinum", selectedPlan.months);
       }
 
       analytics?.track?.('payment_success', {
@@ -435,7 +435,7 @@ const Plans: React.FC = () => {
                       onChange={handleInputChange}
                       disabled={isProcessing}
                       required
-                      maxLength="19"
+                      maxLength={19}
                       className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 text-sm focus:border-[#800000] outline-none transition-all disabled:opacity-50"
                       aria-label="Card Number"
                     />
@@ -455,7 +455,7 @@ const Plans: React.FC = () => {
                       onChange={handleInputChange}
                       disabled={isProcessing}
                       required
-                      maxLength="5"
+                      maxLength={5}
                       className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-4 text-sm focus:border-[#800000] outline-none transition-all disabled:opacity-50"
                       aria-label="Expiry Date"
                     />
@@ -472,7 +472,7 @@ const Plans: React.FC = () => {
                       onChange={handleInputChange}
                       disabled={isProcessing}
                       required
-                      maxLength="4"
+                      maxLength={4}
                       className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-4 text-sm focus:border-[#800000] outline-none transition-all disabled:opacity-50"
                       aria-label="CVV"
                     />

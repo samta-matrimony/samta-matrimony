@@ -125,11 +125,11 @@ const Plans: React.FC = () => {
 
   const handlePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPlan) return;
+    if (!selectedPlan || selectedPlan.type === 'Free') return;
     
     setIsProcessing(true);
     try {
-      await upgradePlan(selectedPlan.type, selectedPlan.months);
+      await upgradePlan(selectedPlan.type as "Silver" | "Gold" | "Platinum", selectedPlan.months);
       track('payment_success', { 
         plan: selectedPlan.type, 
         amount: selectedPlan.numericPrice,

@@ -5,6 +5,25 @@ import { generateSmartBio } from '../services/geminiService';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalytics } from '../contexts/AnalyticsContext';
 
+interface RegisterFormData {
+  email: string;
+  password: string;
+  mobileNumber: string;
+  profileFor: string;
+  gender: 'Female' | 'Male' | 'Other';
+  name: string;
+  dob: string;
+  religion: string;
+  motherTongue: string;
+  occupation: string;
+  city: string;
+  district: string;
+  state: string;
+  bio: string;
+  declarationAccepted: boolean;
+  declarationTimestamp: string;
+}
+
 const Register: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -18,16 +37,16 @@ const Register: React.FC = () => {
   const [error, setError] = useState('');
   const [errorCode, setErrorCode] = useState('');
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<RegisterFormData>({
     email: '',
     password: '',
     mobileNumber: '',
     profileFor: 'Self',
-    gender: 'Female',
+    gender: 'Female' as const,
     name: '',
     dob: '',
-    religion: 'Hindu',
-    motherTongue: 'Hindi',
+    religion: 'Hindu' as const,
+    motherTongue: 'Hindi' as const,
     occupation: '',
     city: '',
     district: '',
@@ -144,11 +163,10 @@ const Register: React.FC = () => {
     try {
       const generatedBio = await generateSmartBio({
         name: formData.name,
-        gender: formData.gender,
-        religion: formData.religion,
+        gender: formData.gender as 'Female' | 'Male' | 'Other',
+        religion: formData.religion as any, // Religion options from form validated in select
         occupation: formData.occupation,
-        motherTongue: formData.motherTongue,
-        profileFor: formData.profileFor
+        motherTongue: formData.motherTongue as any, // MotherTongue options from form validated in select
       });
       
       setFormData(prev => ({ ...prev, bio: generatedBio }));
@@ -331,7 +349,7 @@ const Register: React.FC = () => {
                     <h3 className="text-3xl font-serif font-black text-slate-800">Your Identity</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="col-span-2"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Profile For</label><select className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-4 text-sm outline-none focus:border-[#800000]" value={formData.profileFor} onChange={e => setFormData({...formData, profileFor: e.target.value})}><option>Self</option><option>Son</option><option>Daughter</option><option>Brother</option><option>Sister</option></select></div>
-                      <div><div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Gender</label><select className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-4 text-sm outline-none focus:border-[#800000]" value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})}><option>Female</option><option>Male</option><option>Other</option></select></div></div>
+                      <div><div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Gender</label><select className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-4 text-sm outline-none focus:border-[#800000]" value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value as 'Female' | 'Male' | 'Other'})}><option>Female</option><option>Male</option><option>Other</option></select></div></div>
                       <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Religion</label><select className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-4 text-sm outline-none focus:border-[#800000]" value={formData.religion} onChange={e => setFormData({...formData, religion: e.target.value})}><option>Hindu</option><option>Muslim</option><option>Christian</option><option>Sikh</option></select></div>
                       <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Mother Tongue</label><select className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-4 text-sm outline-none focus:border-[#800000]" value={formData.motherTongue} onChange={e => setFormData({...formData, motherTongue: e.target.value})}><option>Hindi</option><option>Marathi</option><option>Bengali</option><option>Tamil</option></select></div>
                       <div className="col-span-2 relative"><Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="text" placeholder="Occupation" className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 text-sm focus:border-[#800000] outline-none transition-all" value={formData.occupation} onChange={e => setFormData({...formData, occupation: e.target.value})} /></div>

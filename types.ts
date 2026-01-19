@@ -38,6 +38,7 @@ export interface PartnerPreferences {
 
 export interface UserProfile {
   id: string;
+  uid?: string; // Firebase UID, for backward compatibility
   name: string;
   email: string;
   mobileNumber: string;
