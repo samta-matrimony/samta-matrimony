@@ -1,0 +1,4 @@
+- [x] Remove debug useEffect block
+- [x] Add security warning for MASTER_ADMIN_PASSWORD in env vars
+- [x] Add security warning for storing passwords in localStorage
+- [x] Add input validation in signIn function

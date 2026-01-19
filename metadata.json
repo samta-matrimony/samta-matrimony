@@ -1,0 +1,7 @@
+{
+  "name": "Samta Matrimony",
+  "description": "A trusted and culturally respectful matrimonial platform for finding life partners through intuitive browsing, smart matchmaking, and secure interactions.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
