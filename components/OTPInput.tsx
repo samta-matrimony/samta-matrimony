@@ -15,26 +15,29 @@ const OTPInput: React.FC<OTPInputProps> = ({ onComplete, onResend, isLoading, er
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    let interval: any;
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (timer > 0) {
-      interval = setInterval(() => setTimer(t => t - 1), 1000);
+      interval = setInterval(() => setTimer((t) => t - 1), 1000);
     }
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [timer]);
 
   const handleChange = (element: HTMLInputElement, index: number) => {
-    if (isNaN(Number(element.value))) return false;
+    if (isNaN(Number(element.value))) return;
 
     const newOtp = [...otp];
     newOtp[index] = element.value.slice(-1);
     setOtp(newOtp);
 
-    // Shift focus
+    // Shift focus to next input
     if (element.value && index < 5) {
       inputs.current[index + 1]?.focus();
     }
 
-    if (newOtp.every(val => val !== '')) {
+    // Check if all fields are filled
+    if (newOtp.every((val) => val !== '')) {
       onComplete(newOtp.join(''));
     }
   };
@@ -59,12 +62,14 @@ const OTPInput: React.FC<OTPInputProps> = ({ onComplete, onResend, isLoading, er
           <input
             key={index}
             type="text"
+            inputMode="numeric"
             maxLength={1}
-            ref={el => (inputs.current[index] = el)}
+            ref={(el) => (inputs.current[index] = el)}
             value={data}
-            onChange={e => handleChange(e.target, index)}
-            onKeyDown={e => handleKeyDown(e, index)}
+            onChange={(e) => handleChange(e.target, index)}
+            onKeyDown={(e) => handleKeyDown(e, index)}
             disabled={isLoading}
+            aria-label={`OTP digit ${index + 1} of 6`}
             className={`w-full aspect-square text-center text-2xl font-black rounded-2xl border-2 transition-all outline-none ${
               error ? 'border-red-200 bg-red-50 text-red-600' : 'border-slate-200 bg-slate-50 focus:border-[#800000] focus:bg-white'
             }`}
@@ -76,16 +81,18 @@ const OTPInput: React.FC<OTPInputProps> = ({ onComplete, onResend, isLoading, er
 
       <div className="flex flex-col items-center gap-4">
         <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest">
-          <Timer size={14} />
+          <Timer size={14} aria-hidden="true" />
           {timer > 0 ? (
             <span>Resend available in {timer}s</span>
           ) : (
             <button
               type="button"
               onClick={resetOtp}
-              className="text-[#800000] hover:underline flex items-center gap-1"
+              disabled={isLoading}
+              aria-label="Resend OTP code"
+              className="text-[#800000] hover:underline disabled:opacity-50 flex items-center gap-1"
             >
-              <RefreshCw size={12} /> Resend OTP
+              <RefreshCw size={12} aria-hidden="true" /> Resend OTP
             </button>
           )}
         </div>

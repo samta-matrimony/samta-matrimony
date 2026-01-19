@@ -19,7 +19,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile }) => {
   const interest = getInterestWithUser(profile.id);
   const isPending = interest?.status === 'pending';
   const isAccepted = interest?.status === 'accepted';
-  const isSentByMe = interest?.senderId === user?.id;
+  const isSentByMe = interest?.senderId === user?.uid;
 
   const handleInterest = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -29,14 +29,14 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile }) => {
       navigate('/register', { state: { mode: 'login' } });
       return;
     }
-    
+
     if (interest) return;
 
     setIsSending(true);
     try {
       await sendInterest(profile.id);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to send interest:', err);
     } finally {
       setIsSending(false);
     }

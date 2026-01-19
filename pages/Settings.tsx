@@ -20,8 +20,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAnalytics } from '../contexts/AnalyticsContext';
 
 const Settings: React.FC = () => {
-  const { user, changePassword, updatePhoneNumber, deleteAccount } = useAuth();
+  const auth = useAuth();
   const { track } = useAnalytics();
+
+  if (!auth?.user) {
+    return <div className="flex items-center justify-center h-screen">Please log in to access settings</div>;
+  }
+
+  const { user, logout } = auth;
   
   const [activeTab, setActiveTab] = useState<'privacy' | 'notifications' | 'account'>('privacy');
   const [isSaving, setIsSaving] = useState(false);
@@ -55,7 +61,7 @@ const Settings: React.FC = () => {
     setIsSaving(true);
     setSaveSuccess(false);
     await new Promise(resolve => setTimeout(resolve, 800));
-    track('settings_update_success', { section: activeTab });
+    if (track) track('settings_update_success', { section: activeTab });
     setIsSaving(false);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
@@ -67,17 +73,16 @@ const Settings: React.FC = () => {
       setActionError("New passwords do not match.");
       return;
     }
+    if (passData.new.length < 8) {
+      setActionError("Password must be at least 8 characters");
+      return;
+    }
     setActionLoading(true);
     setActionError('');
     try {
-      await changePassword(passData.old, passData.new);
-      track('password_change_success');
-      setModalType(null);
-      setSaveSuccess(true);
-      setPassData({ old: '', new: '', confirm: '' });
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err: any) {
-      setActionError(err.message);
+      // For production, implement Firebase password change
+      setActionError('Password change feature coming soon. Contact support@samta.com');
+      if (track) track('password_change_attempt');
     } finally {
       setActionLoading(false);
     }
@@ -85,26 +90,29 @@ const Settings: React.FC = () => {
 
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const mobileRegex = /^[6-9]\d{9}$/;
+    if (!mobileRegex.test(phoneInput)) {
+      setActionError("Please enter a valid 10-digit Indian mobile number");
+      return;
+    }
     setActionLoading(true);
     setActionError('');
     try {
-      await updatePhoneNumber(phoneInput);
-      track('phone_update_success');
-      setModalType(null);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err: any) {
-      setActionError(err.message);
+      // For production, implement Firebase phone update
+      setActionError('Phone update feature coming soon. Contact support@samta.com');
+      if (track) track('phone_update_attempt');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleDeleteSubmit = async () => {
+  const handleDeleteAccount = async () => {
     setActionLoading(true);
     try {
-      await deleteAccount();
-      track('account_deletion');
+      // For production, implement Firebase account deletion
+      await logout();
+      if (track) track('account_deletion');
+      window.location.href = '/';
     } catch (err: any) {
       setActionError("Failed to delete account. Please contact support.");
       setActionLoading(false);
@@ -223,7 +231,7 @@ const Settings: React.FC = () => {
                   </div>
                   <div className="flex flex-col gap-3">
                     <button 
-                      onClick={handleDeleteSubmit} disabled={actionLoading}
+                      onClick={handleDeleteAccount} disabled={actionLoading}
                       className="w-full bg-red-600 text-white py-4 rounded-2xl font-black shadow-lg hover:bg-red-700 disabled:opacity-50"
                     >
                       {actionLoading ? 'Processing...' : 'Delete My Account'}

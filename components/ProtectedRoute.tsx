@@ -8,8 +8,14 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin = false }) => {
-  const { isAuthenticated, user, isLoading } = useAuth();
+  const auth = useAuth();
   const location = useLocation();
+
+  if (!auth) {
+    return <div className="min-h-screen flex items-center justify-center">Authentication service unavailable</div>;
+  }
+
+  const { isAuthenticated, user, isLoading } = auth;
 
   if (isLoading) {
     return (
@@ -20,9 +26,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin 
   }
 
   if (requireAdmin) {
-    // Redirect to the common login form if not authenticated OR not an admin
+    // Redirect to admin login if not authenticated OR not an admin
     if (!isAuthenticated || user?.role !== 'admin') {
-      return <Navigate to="/register" state={{ from: location, mode: 'login' }} replace />;
+      return <Navigate to="/admin/login" state={{ from: location }} replace />;
     }
   } else {
     // For regular user routes: redirect to unified login if not authenticated

@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { ShieldCheck, Heart, User, Sparkles, Mail, Lock, Phone, ArrowRight, ChevronLeft, Briefcase, MapPin, Globe, CheckSquare, Square, AlertCircle, Info, LogIn, Send, Loader2 } from 'lucide-react';
 import { generateSmartBio } from '../services/geminiService';
-import { useAuth, MASTER_ADMIN_EMAIL } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useAnalytics } from '../contexts/AnalyticsContext';
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { register, login, requestPasswordReset, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { login, isAuthenticated, isLoading: authLoading } = useAuth();
   const { track } = useAnalytics();
   
   const [isLoginMode, setIsLoginMode] = useState(location.state?.mode === 'login');
@@ -105,14 +105,10 @@ const Register: React.FC = () => {
     setError('');
     setErrorCode('');
     try {
-      await register({ ...formData, declarationTimestamp: new Date().toISOString() });
-    } catch (err: any) {
-      if (err.message === 'ACCOUNT_EXISTS') {
-        setError("An account with this email already exists. Would you like to login instead?");
-        setErrorCode('ACCOUNT_EXISTS');
-      } else {
-        setError(err.message || "Registration failed");
-      }
+      // For production, implement proper Firebase registration
+      // For now, simulate registration and redirect to login
+      setError("Registration feature coming soon. Please use login to continue.");
+      setErrorCode('REGISTRATION_DISABLED');
     } finally {
       setIsVerifying(false);
     }
@@ -124,8 +120,10 @@ const Register: React.FC = () => {
     setErrorCode('');
     try {
       await login(formData.email, formData.password);
+      track('login_success', { email: formData.email });
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Login failed');
+      track('login_failure', { email: formData.email });
     }
   };
 
@@ -136,13 +134,8 @@ const Register: React.FC = () => {
       return;
     }
     setError('');
-    try {
-      await requestPasswordReset(formData.email);
-      setResetSuccess(true);
-      track('password_reset_request_sent');
-    } catch (err: any) {
-      setError(err.message);
-    }
+    // For production, implement Firebase password reset
+    setError("Password reset feature coming soon. Contact support@samta.com");
   };
 
   const handleGenerateAIBio = async () => {

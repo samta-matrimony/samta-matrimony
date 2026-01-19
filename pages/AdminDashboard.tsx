@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
@@ -9,36 +9,30 @@ import {
   X,
   Ban,
   Pause,
-  ArrowUpRight,
   Filter,
   Search,
   CheckCircle2,
   Trash2,
   Clock,
-  User,
   BarChart3,
   TrendingUp,
-  PieChart,
   Target,
   Download,
-  ChevronLeft,
-  ChevronRight,
   AlertTriangle,
   Loader2,
   FileCheck,
-  MessageSquare,
-  Activity,
-  UserCheck,
-  Key,
-  ShieldAlert,
-  ArrowRight
+  Activity
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { MOCK_PROFILES } from '../services/mockData';
-import { UserProfile, UserStatus, ModerationStatus, AuditLog, UserReport, PlatformStats, AnalyticsEvent } from '../types';
+import { UserProfile, UserStatus, ModerationStatus, AnalyticsEvent } from '../types';
 import { calculateFunnel, getAnalyticsData } from '../services/analyticsService';
 
-const Toast = ({ message, type, onClose }: { message: string, type: 'success' | 'error', onClose: () => void }) => (
+interface ToastConfig {
+  message: string;
+  type: 'success' | 'error';
+}
+
+const Toast = ({ message, type, onClose }: ToastConfig & { onClose: () => void }) => (
   <div className={`fixed bottom-8 right-8 z-[100] flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl animate-in slide-in-from-bottom-4 duration-300 ${
     type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
   }`}>
@@ -49,98 +43,196 @@ const Toast = ({ message, type, onClose }: { message: string, type: 'success' | 
 );
 
 const AdminDashboard: React.FC = () => {
-  const { user: admin } = useAuth();
+  const auth = useAuth();
   const navigate = useNavigate();
-  
-  const [activeView, setActiveView] = useState<'overview' | 'users' | 'moderation' | 'reports' | 'logs' | 'analytics'>('overview');
-  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
-  const [loadingRows, setLoadingRows] = useState<Record<string, boolean>>({});
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Security check - redirect if not authenticated as admin
+  useEffect(() => {
+    if (!auth?.isAuthenticated || auth?.user?.role !== 'admin') {
+      navigate('/admin/login', { replace: true });
+    }
+  }, [auth?.isAuthenticated, auth?.user?.role, navigate]);
+
+  // Prevent rendering if not authenticated
+  if (!auth?.isAuthenticated || auth?.user?.role !== 'admin') {
+    return null;
+  }
+
+  const [activeView, setActiveView] = useState<'overview' | 'users' | 'moderation' | 'analytics' | 'logs'>('overview');
+  const [toast, setToast] = useState<ToastConfig | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [loadingRows, setLoadingRows] = useState<Set<string>>(new Set());
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [reports, setReports] = useState<UserReport[]>([]);
   const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[]>([]);
-  
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<UserStatus | 'all'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 5;
 
+  // Load initial data
   useEffect(() => {
-    const db = JSON.parse(localStorage.getItem('samta_users_registry_v1') || '[]');
-    const enriched = db.map((record: any) => record.profile);
-    setUsers(enriched);
-
-    const events = getAnalyticsData();
-    setAnalyticsEvents(events);
-
-    setReports([
-      { id: 'r1', reporterId: '1', reportedId: '4', reason: 'Inappropriate language in chat', timestamp: new Date().toISOString(), status: 'pending' }
-    ]);
+    loadUserData();
+    loadAnalyticsData();
   }, []);
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
-  };
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
 
-  const handleStatusChange = async (userId: string, newStatus: UserStatus) => {
-    setLoadingRows(prev => ({ ...prev, [userId]: true }));
+  const loadUserData = useCallback(() => {
     try {
-      await new Promise(r => setTimeout(r, 800));
-      const db = JSON.parse(localStorage.getItem('samta_users_registry_v1') || '[]');
-      const updatedDb = db.map((u: any) => u.profile.id === userId ? { ...u, profile: { ...u.profile, status: newStatus } } : u);
+      const rawData = localStorage.getItem('samta_users_registry_v1');
+      if (!rawData) {
+        setUsers([]);
+        return;
+      }
+      const db = JSON.parse(rawData);
+      if (!Array.isArray(db)) {
+        console.error('Invalid user data format');
+        setUsers([]);
+        return;
+      }
+      const enriched = db
+        .map((record: any) => record?.profile)
+        .filter((profile: any): profile is UserProfile => profile && profile.id && profile.name);
+      setUsers(enriched);
+    } catch (err) {
+      console.error('Error loading users:', err);
+      showToast('Error loading user data', 'error');
+      setUsers([]);
+    }
+  }, []);
+
+  const loadAnalyticsData = useCallback(() => {
+    try {
+      const events = getAnalyticsData();
+      setAnalyticsEvents(Array.isArray(events) ? events : []);
+    } catch (err) {
+      console.error('Error loading analytics:', err);
+      setAnalyticsEvents([]);
+    }
+  }, []);
+
+  const showToast = useCallback((message: string, type: ToastConfig['type'] = 'success') => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToast({ message, type });
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const handleStatusChange = useCallback(async (userId: string, newStatus: UserStatus) => {
+    setLoadingRows(prev => new Set(prev).add(userId));
+    try {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const rawData = localStorage.getItem('samta_users_registry_v1');
+      if (!rawData) throw new Error('No user data found');
+      
+      const db = JSON.parse(rawData);
+      const updatedDb = db.map((u: any) => 
+        u.profile?.id === userId ? { ...u, profile: { ...u.profile, status: newStatus } } : u
+      );
       localStorage.setItem('samta_users_registry_v1', JSON.stringify(updatedDb));
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: newStatus } : u));
       showToast(`User status updated to ${newStatus}`);
     } catch (err) {
-      showToast("Failed to update status", "error");
+      console.error('Status update error:', err);
+      showToast('Failed to update status', 'error');
     } finally {
-      setLoadingRows(prev => ({ ...prev, [userId]: false }));
+      setLoadingRows(prev => {
+        const updated = new Set(prev);
+        updated.delete(userId);
+        return updated;
+      });
     }
-  };
+  }, [showToast]);
 
-  const handleModeration = async (userId: string, status: ModerationStatus) => {
-    setLoadingRows(prev => ({ ...prev, [userId]: true }));
+  const handleModeration = useCallback(async (userId: string, status: ModerationStatus) => {
+    setLoadingRows(prev => new Set(prev).add(userId));
     try {
-      await new Promise(r => setTimeout(r, 800));
-      const db = JSON.parse(localStorage.getItem('samta_users_registry_v1') || '[]');
-      const updatedDb = db.map((u: any) => u.profile.id === userId ? { ...u, profile: { ...u.profile, moderationStatus: status } } : u);
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const rawData = localStorage.getItem('samta_users_registry_v1');
+      if (!rawData) throw new Error('No user data found');
+      
+      const db = JSON.parse(rawData);
+      const updatedDb = db.map((u: any) =>
+        u.profile?.id === userId ? { ...u, profile: { ...u.profile, moderationStatus: status } } : u
+      );
       localStorage.setItem('samta_users_registry_v1', JSON.stringify(updatedDb));
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, moderationStatus: status } : u));
       showToast(`Profile ${status === 'approved' ? 'approved' : 'rejected'}`);
     } catch (err) {
-      showToast("Moderation update failed", "error");
+      console.error('Moderation error:', err);
+      showToast('Moderation update failed', 'error');
     } finally {
-      setLoadingRows(prev => ({ ...prev, [userId]: false }));
+      setLoadingRows(prev => {
+        const updated = new Set(prev);
+        updated.delete(userId);
+        return updated;
+      });
     }
-  };
+  }, [showToast]);
 
-  const handleExport = async () => {
+  const handleExport = useCallback(async () => {
     setIsExporting(true);
     try {
-      await new Promise(r => setTimeout(r, 1500));
-      const headers = ['ID', 'Name', 'Email', 'Gender', 'Age', 'Status', 'DeclarationAccepted', 'DeclarationDate'];
-      const rows = users.map(u => [u.id, u.name, u.email, u.gender, u.age, u.status, u.declarationAccepted ? 'YES' : 'NO', u.declarationTimestamp || 'N/A']);
-      const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `samta_users_export_${new Date().toISOString().split('T')[0]}.csv`);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const headers = ['ID', 'Name', 'Email', 'Gender', 'Age', 'Status', 'Declaration Accepted', 'Declaration Date'];
+      
+      // Properly escape CSV values
+      const escapeCsvValue = (value: string | number | boolean | undefined): string => {
+        if (value === undefined || value === null) return '';
+        const str = String(value);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
+      const rows = users.map(u => [
+        escapeCsvValue(u.id),
+        escapeCsvValue(u.name),
+        escapeCsvValue(u.email),
+        escapeCsvValue(u.gender),
+        escapeCsvValue(u.age),
+        escapeCsvValue(u.status),
+        escapeCsvValue(u.declarationAccepted ? 'Yes' : 'No'),
+        escapeCsvValue(u.declarationTimestamp || 'N/A')
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `samta_users_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      showToast("Data exported successfully");
+      URL.revokeObjectURL(url);
+      showToast('Data exported successfully');
     } catch (err) {
-      showToast("Export failed", "error");
+      console.error('Export error:', err);
+      showToast('Export failed', 'error');
     } finally {
       setIsExporting(false);
     }
-  };
+  }, [users, showToast]);
 
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
-      const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) || u.email.toLowerCase().includes(searchTerm.toLowerCase()) || u.id.includes(searchTerm);
+      if (!u.name || !u.email || !u.id) return false;
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = u.name.toLowerCase().includes(searchLower) || 
+                           u.email.toLowerCase().includes(searchLower) || 
+                           u.id.includes(searchTerm);
       const matchesStatus = statusFilter === 'all' || u.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -149,21 +241,32 @@ const AdminDashboard: React.FC = () => {
   const paginatedUsers = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredUsers.slice(start, start + pageSize);
-  }, [filteredUsers, currentPage]);
+  }, [filteredUsers, currentPage, pageSize]);
 
   const totalPages = Math.ceil(filteredUsers.length / pageSize);
 
-  const stats = {
-    totalUsers: users.length,
-    activeUsers: users.filter(u => u.status === 'active').length,
-    verifiedUsers: users.filter(u => u.isVerified).length,
-    totalInterests: analyticsEvents.filter(e => e.eventName === 'interest_sent').length + 120,
-    totalMessages: analyticsEvents.filter(e => e.eventName === 'message_sent').length + 540,
-    dailyActiveUsers: [850, 920, 880, 1050, 1100, 1205, 1180],
-    funnel: calculateFunnel(analyticsEvents) 
-  };
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
 
-  const UserManagement = () => (
+  const stats = useMemo(() => {
+    const activeUsers = users.filter(u => u.status === 'active');
+    const verifiedUsers = users.filter(u => u.isVerified);
+    const interestEvents = analyticsEvents.filter(e => e.eventName === 'interest_sent');
+    const messageEvents = analyticsEvents.filter(e => e.eventName === 'message_sent');
+    
+    return {
+      totalUsers: users.length,
+      activeUsers: activeUsers.length,
+      verifiedUsers: verifiedUsers.length,
+      totalInterests: interestEvents.length + 120,
+      totalMessages: messageEvents.length + 540,
+      funnel: calculateFunnel(analyticsEvents) 
+    };
+  }, [users, analyticsEvents]);
+
+  const UserManagement = useCallback(() => (
     <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
       <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-8 border-b border-slate-50 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
@@ -178,12 +281,12 @@ const AdminDashboard: React.FC = () => {
               placeholder="Search members..." 
               className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pl-10 pr-4 text-sm focus:border-[#800000] outline-none"
               value={searchTerm}
-              onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
               <tr>
                 <th className="px-8 py-4">Identity</th>
@@ -197,7 +300,9 @@ const AdminDashboard: React.FC = () => {
                 <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="px-8 py-6">
                     <div className="flex items-center gap-4">
-                      <img src={user.photoUrl} className="w-12 h-12 rounded-2xl object-cover shadow-sm" alt="" />
+                      {user.photoUrl && (
+                        <img src={user.photoUrl} className="w-12 h-12 rounded-2xl object-cover shadow-sm" alt={user.name} />
+                      )}
                       <div>
                         <p className="font-black text-slate-800">{user.name}</p>
                         <p className="text-[10px] font-bold text-slate-400 uppercase">ID: {user.id}</p>
@@ -223,11 +328,21 @@ const AdminDashboard: React.FC = () => {
                   </td>
                   <td className="px-8 py-6 text-right">
                     <div className="flex justify-end gap-2">
-                      <button onClick={() => handleStatusChange(user.id, user.status === 'active' ? 'suspended' : 'active')} className="p-2 bg-slate-50 rounded-xl hover:bg-slate-100 text-slate-600">
-                        {user.status === 'active' ? <Pause size={18} /> : <Check size={18} />}
+                      <button 
+                        onClick={() => handleStatusChange(user.id, user.status === 'active' ? 'suspended' : 'active')}
+                        disabled={loadingRows.has(user.id)}
+                        className="p-2 bg-slate-50 rounded-xl hover:bg-slate-100 text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label={user.status === 'active' ? 'Suspend user' : 'Activate user'}
+                      >
+                        {loadingRows.has(user.id) ? <Loader2 size={18} className="animate-spin" /> : (user.status === 'active' ? <Pause size={18} /> : <Check size={18} />)}
                       </button>
-                      <button onClick={() => handleStatusChange(user.id, 'banned')} className="p-2 bg-red-50 rounded-xl hover:bg-red-100 text-red-600">
-                        <Ban size={18} />
+                      <button 
+                        onClick={() => handleStatusChange(user.id, 'banned')}
+                        disabled={loadingRows.has(user.id)}
+                        className="p-2 bg-red-50 rounded-xl hover:bg-red-100 text-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Ban user"
+                      >
+                        {loadingRows.has(user.id) ? <Loader2 size={18} className="animate-spin" /> : <Ban size={18} />}
                       </button>
                     </div>
                   </td>
@@ -236,24 +351,49 @@ const AdminDashboard: React.FC = () => {
             </tbody>
           </table>
         </div>
+        {totalPages > 1 && (
+          <div className="p-6 border-t border-slate-50 flex justify-between items-center">
+            <span className="text-sm text-slate-600">Page {currentPage} of {totalPages}</span>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-2 bg-slate-50 rounded-lg disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-2 bg-slate-50 rounded-lg disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
-  );
+  ), [paginatedUsers, loadingRows, handleStatusChange, searchTerm, totalPages, currentPage]);
 
-  const GrowthInsights = () => (
+  const GrowthInsights = useCallback(() => (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Registration Conversion</p>
            <div className="flex items-end gap-3">
-              <p className="text-4xl font-black text-slate-800">{((stats.funnel.registrations / stats.funnel.visitors) * 100).toFixed(1)}%</p>
+              <p className="text-4xl font-black text-slate-800">
+                {stats.funnel.visitors > 0 ? ((stats.funnel.registrations / stats.funnel.visitors) * 100).toFixed(1) : 0}%
+              </p>
               <TrendingUp className="text-emerald-500 mb-2" size={24} />
            </div>
         </div>
         <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Engagement Rate</p>
            <div className="flex items-end gap-3">
-              <p className="text-4xl font-black text-slate-800">{((stats.funnel.engagement / stats.funnel.registrations) * 100).toFixed(1)}%</p>
+              <p className="text-4xl font-black text-slate-800">
+                {stats.funnel.registrations > 0 ? ((stats.funnel.engagement / stats.funnel.registrations) * 100).toFixed(1) : 0}%
+              </p>
               <Activity className="text-indigo-500 mb-2" size={24} />
            </div>
         </div>
@@ -274,17 +414,24 @@ const AdminDashboard: React.FC = () => {
                     <span className="text-xs font-black text-slate-800">{step.value}</span>
                  </div>
                  <div className="h-10 w-full bg-slate-50 rounded-2xl overflow-hidden">
-                    <div className={`h-full ${step.color} rounded-2xl`} style={{ width: `${(step.value / stats.funnel.visitors) * 100}%` }}></div>
+                    <div 
+                      className={`h-full ${step.color} rounded-2xl transition-all duration-300`} 
+                      style={{ width: `${stats.funnel.visitors > 0 ? (step.value / stats.funnel.visitors) * 100 : 0}%` }}
+                    />
                  </div>
               </div>
             ))}
          </div>
       </div>
     </div>
-  );
+  ), [stats]);
 
-  const SystemAudit = () => {
-    const logs = analyticsEvents.filter(e => ['login_success', 'registration_complete', 'password_change_success', 'account_deletion'].includes(e.eventName)).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const SystemAudit = useCallback(() => {
+    const logs = analyticsEvents
+      .filter(e => ['login_success', 'registration_complete', 'password_change_success', 'account_deletion'].includes(e.eventName))
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 10); // Limit to 10 most recent
+
     return (
       <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden animate-in slide-in-from-right-4 duration-500">
         <div className="p-8 border-b border-slate-50">
@@ -292,9 +439,15 @@ const AdminDashboard: React.FC = () => {
           <p className="text-slate-400 text-sm">Security events and platform administration logs</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-8 py-4 text-xs font-black uppercase text-slate-400">Event</th>
+                <th className="px-8 py-4 text-xs font-black uppercase text-slate-400">Timestamp</th>
+              </tr>
+            </thead>
             <tbody className="divide-y divide-slate-50">
-              {logs.map((log, i) => (
+              {logs.length > 0 ? logs.map((log, i) => (
                 <tr key={i} className="hover:bg-slate-50/50 transition-colors">
                   <td className="px-8 py-6">
                     <span className="font-bold text-slate-700 capitalize">{log.eventName.replace(/_/g, ' ')}</span>
@@ -302,20 +455,24 @@ const AdminDashboard: React.FC = () => {
                   </td>
                   <td className="px-8 py-6 text-slate-500 text-xs">{new Date(log.timestamp).toLocaleString()}</td>
                 </tr>
-              ))}
+              )) : (
+                <tr>
+                  <td colSpan={2} className="px-8 py-6 text-center text-slate-400">No audit logs found</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
     );
-  };
+  }, [analyticsEvents]);
 
   return (
     <div className="bg-slate-50 min-h-screen">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <div className="flex h-screen overflow-hidden">
-        <aside className="w-72 bg-white border-r border-slate-100 flex flex-col shrink-0">
-          <div className="p-8">
+        <aside className="w-72 bg-white border-r border-slate-100 flex flex-col shrink-0 overflow-y-auto">
+          <div className="p-8 sticky top-0 bg-white border-b border-slate-100">
              <div className="flex items-center gap-2 mb-10">
                 <div className="w-10 h-10 bg-[#800000] rounded-xl flex items-center justify-center text-[#FFD700]">
                    <ShieldCheck fill="currentColor" size={24} />
@@ -324,14 +481,26 @@ const AdminDashboard: React.FC = () => {
              </div>
              <nav className="space-y-1">
                 {[
-                  { id: 'overview', label: 'Command Center', icon: LayoutDashboard },
-                  { id: 'users', label: 'User Repository', icon: Users },
-                  { id: 'moderation', label: 'Moderation Queue', icon: ShieldCheck, count: users.filter(u => u.moderationStatus === 'pending').length },
-                  { id: 'analytics', label: 'Growth Insights', icon: BarChart3 },
-                  { id: 'logs', label: 'System Audit', icon: History }
+                  { id: 'overview' as const, label: 'Command Center', icon: LayoutDashboard },
+                  { id: 'users' as const, label: 'User Repository', icon: Users },
+                  { id: 'moderation' as const, label: 'Moderation Queue', icon: ShieldCheck, count: users.filter(u => u.moderationStatus === 'pending').length },
+                  { id: 'analytics' as const, label: 'Growth Insights', icon: BarChart3 },
+                  { id: 'logs' as const, label: 'System Audit', icon: History }
                 ].map(item => (
-                  <button key={item.id} onClick={() => setActiveView(item.id as any)} className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-sm font-bold transition-all ${activeView === item.id ? 'bg-[#800000] text-white shadow-xl shadow-maroon-100' : 'text-slate-500 hover:bg-slate-50'}`}>
-                    <div className="flex items-center gap-3"><item.icon size={20} />{item.label}</div>
+                  <button 
+                    key={item.id} 
+                    onClick={() => setActiveView(item.id)}
+                    className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-sm font-bold transition-all ${
+                      activeView === item.id ? 'bg-[#800000] text-white shadow-xl' : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon size={20} />
+                      {item.label}
+                    </div>
+                    {item.count !== undefined && item.count > 0 && (
+                      <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">{item.count}</span>
+                    )}
                   </button>
                 ))}
              </nav>
@@ -342,13 +511,23 @@ const AdminDashboard: React.FC = () => {
             <header className="flex justify-between items-end gap-6">
               <div>
                  <h1 className="text-4xl font-serif font-black text-slate-900 capitalize tracking-tight">
-                   {activeView === 'overview' ? 'Command Center' : activeView.replace(/_/g, ' ')}
+                   {activeView === 'overview' && 'Command Center'}
+                   {activeView === 'users' && 'User Repository'}
+                   {activeView === 'moderation' && 'Moderation Queue'}
+                   {activeView === 'analytics' && 'Growth Insights'}
+                   {activeView === 'logs' && 'System Audit'}
                  </h1>
               </div>
-              <button onClick={handleExport} className="flex items-center gap-2 bg-white px-6 py-3.5 rounded-2xl text-sm font-bold text-slate-600 shadow-sm border border-slate-100 hover:bg-slate-50">
-                 <Download size={18} /> Export Data
+              <button 
+                onClick={handleExport}
+                disabled={isExporting}
+                className="flex items-center gap-2 bg-white px-6 py-3.5 rounded-2xl text-sm font-bold text-slate-600 shadow-sm border border-slate-100 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                 {isExporting ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
+                 {isExporting ? 'Exporting...' : 'Export Data'}
               </button>
             </header>
+
             {activeView === 'overview' && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in duration-700">
                 {[
@@ -368,15 +547,20 @@ const AdminDashboard: React.FC = () => {
                 ))}
               </div>
             )}
+
             {activeView === 'users' && <UserManagement />}
+
             {activeView === 'moderation' && (
               <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-8 border-b border-slate-50">
                    <h3 className="text-2xl font-serif font-black text-slate-800">Moderation Queue</h3>
                 </div>
-                <div className="p-8 text-center text-slate-400">Queue is empty.</div>
+                <div className="p-8 text-center text-slate-400">
+                  {users.filter(u => u.moderationStatus === 'pending').length === 0 ? 'Queue is empty.' : 'Pending items shown above'}
+                </div>
               </div>
             )}
+
             {activeView === 'analytics' && <GrowthInsights />}
             {activeView === 'logs' && <SystemAudit />}
           </div>

@@ -21,28 +21,39 @@ export const MatchmakingProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [recommendations, setRecommendations] = useState<MatchScore[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   const refreshRecommendations = useCallback(async () => {
     if (!isAuthenticated || !user) return;
-    setIsLoading(true);
     
-    // Exclude demo profiles from candidates list for AI recommendations
-    const candidates = MOCK_PROFILES.filter(p => !p.isDemo && p.id !== user.id && p.gender !== user.gender);
-    
-    if (candidates.length === 0) {
+    try {
+      setIsLoading(true);
+      
+      // Exclude demo profiles and same user from candidates list
+      const candidates = MOCK_PROFILES.filter(
+        (p) => !p.isDemo && p.id !== user.uid && p.gender !== user.gender
+      );
+      
+      if (candidates.length === 0) {
+        setRecommendations([]);
+      } else {
+        const aiScores = await getAIBasedRecommendations(user as UserProfile, candidates);
+        setRecommendations(aiScores.slice(0, 10));
+      }
+    } catch (error) {
+      console.error('Error fetching recommendations:', error);
       setRecommendations([]);
-    } else {
-      const aiScores = await getAIBasedRecommendations(user as UserProfile, candidates);
-      setRecommendations(aiScores.slice(0, 10));
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   }, [user, isAuthenticated]);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !initialized) {
+      setInitialized(true);
       refreshRecommendations();
       
+      // Set welcome notification only once
       setNotifications([
         {
           id: 'n1',
@@ -54,31 +65,45 @@ export const MatchmakingProvider: React.FC<{ children: React.ReactNode }> = ({ c
         }
       ]);
     }
-  }, [isAuthenticated, user?.id]);
+  }, [isAuthenticated, initialized, refreshRecommendations]);
 
-  const addNotification = (n: Omit<AppNotification, 'id' | 'timestamp' | 'isRead'>) => {
+  const addNotification = useCallback((n: Omit<AppNotification, 'id' | 'timestamp' | 'isRead'>) => {
+    if (!n.type || !n.title) {
+      console.warn('Invalid notification data');
+      return;
+    }
+    
     const newN: AppNotification = {
       ...n,
       id: `notif-${Date.now()}`,
       timestamp: new Date().toISOString(),
       isRead: false
     };
-    setNotifications(prev => [newN, ...prev]);
-  };
+    setNotifications((prev) => [newN, ...prev]);
+  }, []);
 
-  const markNotificationAsRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
-  };
+  const markNotificationAsRead = useCallback((id: string) => {
+    if (!id) {
+      console.warn('Invalid notification ID');
+      return;
+    }
+    
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
+    );
+  }, []);
 
   return (
-    <MatchmakingContext.Provider value={{ 
-      recommendations, 
-      notifications, 
-      isLoading, 
-      refreshRecommendations, 
-      markNotificationAsRead,
-      addNotification
-    }}>
+    <MatchmakingContext.Provider
+      value={{
+        recommendations,
+        notifications,
+        isLoading,
+        refreshRecommendations,
+        markNotificationAsRead,
+        addNotification
+      }}
+    >
       {children}
     </MatchmakingContext.Provider>
   );

@@ -13,9 +13,14 @@ export const AnalyticsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const { user } = useAuth();
 
   const track = useCallback((eventName: string, properties: Record<string, any> = {}) => {
-    const userId = user?.id || 'anonymous';
-    trackEvent(userId, eventName, properties);
-  }, [user?.id]);
+    if (!eventName) return;
+    const userId = user?.uid || 'anonymous';
+    try {
+      trackEvent(userId, eventName, properties);
+    } catch (error) {
+      console.error('Analytics tracking error:', error);
+    }
+  }, [user?.uid]);
 
   return (
     <AnalyticsContext.Provider value={{ track }}>

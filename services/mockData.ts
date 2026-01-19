@@ -1,6 +1,9 @@
-
 import { UserProfile } from '../types';
 
+/**
+ * Mock user profiles for development and testing
+ * All profiles are marked as isDemo=true and use Unsplash images
+ */
 export const MOCK_PROFILES: UserProfile[] = [
   {
     id: '1',
@@ -265,3 +268,80 @@ export const MOCK_PROFILES: UserProfile[] = [
     }
   }
 ];
+
+/**
+ * Validates all mock profiles have required fields
+ */
+function validateMockProfiles(): boolean {
+  try {
+    if (!Array.isArray(MOCK_PROFILES)) {
+      console.error('Mock profiles is not an array');
+      return false;
+    }
+
+    for (const profile of MOCK_PROFILES) {
+      // Validate required fields
+      if (!profile.id || !profile.name || !profile.email || !profile.gender || !profile.age) {
+        console.error('Invalid mock profile:', profile);
+        return false;
+      }
+
+      // Validate types
+      if (typeof profile.age !== 'number' || profile.age < 18 || profile.age > 100) {
+        console.error('Invalid age in mock profile:', profile.name);
+        return false;
+      }
+
+      if (typeof profile.email !== 'string' || !profile.email.includes('@')) {
+        console.error('Invalid email in mock profile:', profile.name);
+        return false;
+      }
+
+      // Validate isDemo flag is set
+      if (!profile.isDemo) {
+        console.warn(`Mock profile "${profile.name}" should have isDemo=true`);
+      }
+    }
+
+    console.log(`✓ Validated ${MOCK_PROFILES.length} mock profiles`);
+    return true;
+  } catch (err) {
+    console.error('Error validating mock profiles:', err);
+    return false;
+  }
+}
+
+// Run validation on module load
+if (typeof window !== 'undefined') {
+  validateMockProfiles();
+}
+
+/**
+ * Gets a random mock profile (useful for testing)
+ */
+export function getRandomMockProfile(): UserProfile {
+  const randomIndex = Math.floor(Math.random() * MOCK_PROFILES.length);
+  return MOCK_PROFILES[randomIndex];
+}
+
+/**
+ * Filters mock profiles by criteria
+ */
+export function filterMockProfiles(
+  criteria: Partial<{
+    gender: string;
+    minAge: number;
+    maxAge: number;
+    religion: string;
+    city: string;
+  }>
+): UserProfile[] {
+  return MOCK_PROFILES.filter((profile) => {
+    if (criteria.gender && profile.gender !== criteria.gender) return false;
+    if (criteria.minAge && profile.age < criteria.minAge) return false;
+    if (criteria.maxAge && profile.age > criteria.maxAge) return false;
+    if (criteria.religion && profile.religion !== criteria.religion) return false;
+    if (criteria.city && profile.city !== criteria.city) return false;
+    return true;
+  });
+}

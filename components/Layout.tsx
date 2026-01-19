@@ -30,19 +30,25 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   // Page View Tracking
   useEffect(() => {
-    track('page_view', { 
-      path: location.pathname,
-      search: location.search,
-      title: document.title
-    });
+    if (track) {
+      track('page_view', {
+        path: location.pathname,
+        search: location.search,
+        title: document.title,
+      });
+    }
   }, [location.pathname, track]);
 
-  const handleLogout = () => {
-    track('logout');
-    logout();
-    navigate('/');
-    setIsUserMenuOpen(false);
-    setIsMenuOpen(false);
+  const handleLogout = async () => {
+    try {
+      if (track) track('logout');
+      await logout();
+      navigate('/');
+      setIsUserMenuOpen(false);
+      setIsMenuOpen(false);
+    } catch (err) {
+      console.error('Logout failed:', err);
+    }
   };
 
   return (

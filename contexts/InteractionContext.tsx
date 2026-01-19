@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import { Interest, InterestStatus } from '../types';
 import { useAuth } from './AuthContext';
 import { useAnalytics } from './AnalyticsContext';
@@ -8,37 +8,32 @@ interface InteractionContextType {
   sendInterest: (targetUserId: string) => Promise<void>;
   updateInterestStatus: (interestId: string, status: InterestStatus) => Promise<void>;
   getInterestWithUser: (targetUserId: string) => Interest | undefined;
-  isLoading: boolean;
 }
 
 const InteractionContext = createContext<InteractionContextType | undefined>(undefined);
 
 export const InteractionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isAuthenticated, updateUser } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { track } = useAnalytics();
   const [interests, setInterests] = useState<Interest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const saved = localStorage.getItem('samta_interests');
-    if (saved) {
-      setInterests(JSON.parse(saved));
+  const sendInterest = useCallback(async (targetUserId: string) => {
+    if (!isAuthenticated || !user) {
+      throw new Error("Please login to send interest");
     }
-    setIsLoading(false);
-  }, []);
 
-  const saveInterests = (newInterests: Interest[]) => {
-    setInterests(newInterests);
-    localStorage.setItem('samta_interests', JSON.stringify(newInterests));
-  };
+    if (!targetUserId) {
+      throw new Error("Invalid target user ID");
+    }
 
-  const sendInterest = async (targetUserId: string) => {
-    if (!isAuthenticated || !user) throw new Error("Please login to send interest");
-    
+    if (targetUserId === user.uid) {
+      throw new Error("Cannot send interest to yourself");
+    }
+
     // Check for duplicates
     const exists = interests.find(i => 
-      (i.senderId === user.id && i.receiverId === targetUserId) ||
-      (i.senderId === targetUserId && i.receiverId === user.id)
+      (i.senderId === user.uid && i.receiverId === targetUserId) ||
+      (i.senderId === targetUserId && i.receiverId === user.uid)
     );
 
     if (exists) {
@@ -47,50 +42,43 @@ export const InteractionProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     const newInterest: Interest = {
       id: `int-${Date.now()}`,
-      senderId: user.id as string,
+      senderId: user.uid,
       receiverId: targetUserId,
       status: 'pending',
       timestamp: new Date().toISOString()
     };
 
-    const newInterests = [...interests, newInterest];
-    saveInterests(newInterests);
+    setInterests((prev) => [...prev, newInterest]);
     track('interest_sent', { targetId: targetUserId });
-    
-    const sentCount = newInterests.filter(i => i.senderId === user.id).length;
-    if (user.subscription) {
-       updateUser({
-         subscription: {
-           ...user.subscription,
-           interestsSentCount: sentCount
-         }
-       });
+  }, [user, isAuthenticated, interests, track]);
+
+  const updateInterestStatus = useCallback(async (interestId: string, status: InterestStatus) => {
+    if (!interestId || !status) {
+      throw new Error("Invalid interest ID or status");
     }
-  };
 
-  const updateInterestStatus = async (interestId: string, status: InterestStatus) => {
-    const newInterests = interests.map(i => 
-      i.id === interestId ? { ...i, status } : i
+    setInterests((prev) =>
+      prev.map(i => 
+        i.id === interestId ? { ...i, status } : i
+      )
     );
-    saveInterests(newInterests);
     track('interest_status_update', { interestId, status });
-  };
+  }, [track]);
 
-  const getInterestWithUser = (targetUserId: string) => {
-    if (!user) return undefined;
+  const getInterestWithUser = useCallback((targetUserId: string) => {
+    if (!user || !targetUserId) return undefined;
     return interests.find(i => 
-      (i.senderId === user.id && i.receiverId === targetUserId) ||
-      (i.senderId === targetUserId && i.receiverId === user.id)
+      (i.senderId === user.uid && i.receiverId === targetUserId) ||
+      (i.senderId === targetUserId && i.receiverId === user.uid)
     );
-  };
+  }, [user, interests]);
 
   return (
     <InteractionContext.Provider value={{ 
       interests, 
       sendInterest, 
       updateInterestStatus, 
-      getInterestWithUser,
-      isLoading 
+      getInterestWithUser
     }}>
       {children}
     </InteractionContext.Provider>

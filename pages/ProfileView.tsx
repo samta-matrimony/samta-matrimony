@@ -32,7 +32,7 @@ import AdSlot from '../components/AdSlot';
 const ProfileView: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated, user: loggedInUser, trackProfileView } = useAuth();
+  const { isAuthenticated, user: loggedInUser } = useAuth();
   const { getInterestWithUser, sendInterest } = useInteractions();
   
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -46,13 +46,10 @@ const ProfileView: React.FC = () => {
     if (found) {
       setProfile(found);
       setActivePhoto(found.photoUrl);
-      if (isAuthenticated && !found.isDemo) {
-        trackProfileView(found.id);
-      }
     } else {
       navigate('/');
     }
-  }, [id, navigate, isAuthenticated]);
+  }, [id, navigate]);
 
   const generateInsights = async () => {
     if (!profile || !loggedInUser || profile.isDemo) return;
@@ -88,7 +85,7 @@ const ProfileView: React.FC = () => {
   const isSentByMe = interest?.senderId === loggedInUser?.id;
 
   const DetailSection = ({ title, icon: Icon, children }: { title: string, icon: any, children?: React.ReactNode }) => (
-    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 space-y-6 overflow-hidden relative">
+    <div className="bg-white rounded-3xl shadow-sm border uborder-slate-100 p-8 space-y-6 overflow-hidden relative">
       <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
         <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-[#800000]">
           <Icon size={20} />

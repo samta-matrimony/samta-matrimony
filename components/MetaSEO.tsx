@@ -9,21 +9,22 @@ interface SEOProps {
   canonical?: string;
 }
 
-const MetaSEO: React.FC<SEOProps> = ({ 
-  title = "Samta Matrimony - Trusted Partner Discovery", 
-  description = "Join Samta Matrimony, the most trusted site to find your perfect life partner. We celebrate cultural values and modernize the matchmaking experience.",
-  keywords = "matrimony, marriage, life partner, indian wedding, matchmaking, verified profiles",
-  image = "https://samta-matrimony.com/og-image.jpg",
-  canonical
+const MetaSEO: React.FC<SEOProps> = ({
+  title = 'Samta Matrimony - Trusted Partner Discovery',
+  description = 'Join Samta Matrimony, the most trusted site to find your perfect life partner. We celebrate cultural values and modernize the matchmaking experience.',
+  keywords = 'matrimony, marriage, life partner, indian wedding, matchmaking, verified profiles',
+  image = 'https://samta-matrimony.com/og-image.jpg',
+  canonical,
 }) => {
   const location = useLocation();
   const currentUrl = `https://samta-matrimony.com${location.pathname}${location.search}`;
 
   useEffect(() => {
+    // Update document title
     document.title = title;
-    
-    const updateMeta = (name: string, content: string, attr: string = 'name') => {
-      let element = document.querySelector(`meta[${attr}="${name}"]`);
+
+    const updateOrCreateMeta = (name: string, content: string, attr: string = 'name'): void => {
+      let element = document.querySelector(`meta[${attr}="${name}"]`) as HTMLMetaElement | null;
       if (!element) {
         element = document.createElement('meta');
         element.setAttribute(attr, name);
@@ -32,18 +33,25 @@ const MetaSEO: React.FC<SEOProps> = ({
       element.setAttribute('content', content);
     };
 
-    updateMeta('description', description);
-    updateMeta('keywords', keywords);
-    updateMeta('og:title', title, 'property');
-    updateMeta('og:description', description, 'property');
-    updateMeta('og:image', image, 'property');
-    updateMeta('og:url', currentUrl, 'property');
-    updateMeta('og:type', 'website', 'property');
-    updateMeta('twitter:card', 'summary_large_image');
-    updateMeta('twitter:title', title);
-    updateMeta('twitter:description', description);
+    // Update standard meta tags
+    updateOrCreateMeta('description', description);
+    updateOrCreateMeta('keywords', keywords);
 
-    let link: HTMLLinkElement | null = document.querySelector("link[rel='canonical']");
+    // Update OpenGraph meta tags
+    updateOrCreateMeta('og:title', title, 'property');
+    updateOrCreateMeta('og:description', description, 'property');
+    updateOrCreateMeta('og:image', image, 'property');
+    updateOrCreateMeta('og:url', currentUrl, 'property');
+    updateOrCreateMeta('og:type', 'website', 'property');
+
+    // Update Twitter Card meta tags
+    updateOrCreateMeta('twitter:card', 'summary_large_image');
+    updateOrCreateMeta('twitter:title', title);
+    updateOrCreateMeta('twitter:description', description);
+    updateOrCreateMeta('twitter:image', image);
+
+    // Update or create canonical link
+    let link = document.querySelector("link[rel='canonical']") as HTMLLinkElement | null;
     if (!link) {
       link = document.createElement('link');
       link.setAttribute('rel', 'canonical');
@@ -51,33 +59,37 @@ const MetaSEO: React.FC<SEOProps> = ({
     }
     link.setAttribute('href', canonical || currentUrl);
 
-    let schemaScript = document.getElementById('json-ld-schema');
+    // Update or create JSON-LD schema
+    let schemaScript = document.getElementById('json-ld-schema') as HTMLScriptElement | null;
     if (!schemaScript) {
       schemaScript = document.createElement('script');
       schemaScript.id = 'json-ld-schema';
       schemaScript.setAttribute('type', 'application/ld+json');
       document.head.appendChild(schemaScript);
     }
-    
+
     const schemaData = {
-      "@context": "https://schema.org",
-      "@type": "Service",
-      "name": "Samta Matrimony",
-      "description": description,
-      "provider": {
-        "@type": "Organization",
-        "name": "Samta Matrimony Services Pvt. Ltd.",
-        "url": "https://samta-matrimony.com",
-        "logo": "https://samta-matrimony.com/logo.png",
-        "sameAs": [
-          "https://facebook.com/samtamatrimony",
-          "https://instagram.com/samtamatrimony"
-        ]
+      '@context': 'https://schema.org',
+      '@type': 'Service',
+      name: 'Samta Matrimony',
+      description: description,
+      provider: {
+        '@type': 'Organization',
+        name: 'Samta Matrimony Services Pvt. Ltd.',
+        url: 'https://samta-matrimony.com',
+        logo: 'https://samta-matrimony.com/logo.png',
+        sameAs: [
+          'https://facebook.com/samtamatrimony',
+          'https://instagram.com/samtamatrimony',
+        ],
       },
-      "areaServed": "India"
+      areaServed: 'India',
     };
     schemaScript.innerHTML = JSON.stringify(schemaData);
 
+    return () => {
+      // Cleanup if needed
+    };
   }, [title, description, keywords, image, currentUrl, canonical]);
 
   return null;

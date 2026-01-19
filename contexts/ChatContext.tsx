@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import { ChatMessage } from '../types';
 import { useAuth } from './AuthContext';
 import { useInteractions } from './InteractionContext';
@@ -9,7 +9,7 @@ interface ChatContextType {
   messages: ChatMessage[];
   sendMessage: (receiverId: string, text: string) => Promise<void>;
   getConversation: (targetUserId: string) => ChatMessage[];
-  isLoading: boolean;
+  clearMessages: () => void;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -19,62 +19,62 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { interests } = useInteractions();
   const { track } = useAnalytics();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const saved = localStorage.getItem('samta_chat_messages');
-    if (saved) {
-      setMessages(JSON.parse(saved));
+  const sendMessage = useCallback(async (receiverId: string, text: string) => {
+    if (!isAuthenticated || !user) {
+      throw new Error("Authentication required");
     }
-    setIsLoading(false);
-  }, []);
 
-  const saveMessages = (newMessages: ChatMessage[]) => {
-    setMessages(newMessages);
-    localStorage.setItem('samta_chat_messages', JSON.stringify(newMessages));
-  };
+    if (!text || text.trim().length === 0) {
+      throw new Error("Message cannot be empty");
+    }
 
-  const sendMessage = async (receiverId: string, text: string) => {
-    if (!isAuthenticated || !user) throw new Error("Authentication required");
+    if (!receiverId) {
+      throw new Error("Invalid receiver ID");
+    }
 
     // Access Control: Check if interest is accepted
     const interest = interests.find(i => 
-      ((i.senderId === user.id && i.receiverId === receiverId) ||
-       (i.senderId === receiverId && i.receiverId === user.id)) &&
+      ((i.senderId === user.uid && i.receiverId === receiverId) ||
+       (i.senderId === receiverId && i.receiverId === user.uid)) &&
       i.status === 'accepted'
     );
 
     if (!interest) {
-      throw new Error("Chat is only available after interest is accepted.");
+      throw new Error("Chat is only available after interest is accepted");
     }
 
     const newMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
-      senderId: user.id as string,
+      senderId: user.uid,
       receiverId: receiverId,
       conversationId: interest.id,
-      text: text,
+      text: text.trim(),
       timestamp: new Date().toISOString()
     };
 
-    saveMessages([...messages, newMessage]);
+    setMessages((prev) => [...prev, newMessage]);
     track('message_sent', { receiverId, wordCount: text.split(' ').length });
-  };
+  }, [user, isAuthenticated, interests, track]);
 
-  const getConversation = (targetUserId: string) => {
+  const getConversation = useCallback((targetUserId: string) => {
     if (!user) return [];
     return messages.filter(m => 
-      (m.senderId === user.id && m.receiverId === targetUserId) ||
-      (m.senderId === targetUserId && m.receiverId === user.id)
+      (m.senderId === user.uid && m.receiverId === targetUserId) ||
+      (m.senderId === targetUserId && m.receiverId === user.uid)
     ).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-  };
+  }, [user, messages]);
+
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+  }, []);
 
   return (
     <ChatContext.Provider value={{ 
       messages, 
       sendMessage, 
       getConversation,
-      isLoading 
+      clearMessages
     }}>
       {children}
     </ChatContext.Provider>

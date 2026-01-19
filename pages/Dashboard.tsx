@@ -51,10 +51,10 @@ const Dashboard: React.FC = () => {
   };
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
-  const receivedInterests = interests.filter(i => i.receiverId === user?.id && i.status === 'pending');
-  const sentInterests = interests.filter(i => i.senderId === user?.id);
+  const receivedInterests = interests.filter(i => i.receiverId === user?.uid && i.status === 'pending');
+  const sentInterests = interests.filter(i => i.senderId === user?.uid);
   const matchedInterests = interests.filter(i => 
-    (i.senderId === user?.id || i.receiverId === user?.id) && i.status === 'accepted'
+    (i.senderId === user?.uid || i.receiverId === user?.uid) && i.status === 'accepted'
   );
 
   const getProfile = (id: string) => MOCK_PROFILES.find(p => p.id === id);

@@ -35,13 +35,21 @@ const Messages: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+        <p className="text-slate-500">Please log in to view messages</p>
+      </div>
+    );
+  }
+
   // Get all matched users (accepted interests)
   const matchedInterests = interests.filter(i => 
-    (i.senderId === user?.id || i.receiverId === user?.id) && i.status === 'accepted'
+    (i.senderId === user.uid || i.receiverId === user.uid) && i.status === 'accepted'
   );
 
   const matchedUsers = matchedInterests.map(interest => {
-    const partnerId = interest.senderId === user?.id ? interest.receiverId : interest.senderId;
+    const partnerId = interest.senderId === user.uid ? interest.receiverId : interest.senderId;
     return MOCK_PROFILES.find(p => p.id === partnerId);
   }).filter(Boolean);
 
@@ -197,7 +205,7 @@ const Messages: React.FC = () => {
 
                 {conversation.length > 0 ? (
                   conversation.map((msg, idx) => {
-                    const isMe = msg.senderId === user?.id;
+                    const isMe = msg.senderId === user.uid;
                     return (
                       <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 duration-300`}>
                         <div className={`max-w-[80%] md:max-w-[60%] space-y-1`}>
